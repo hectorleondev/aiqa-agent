@@ -1,0 +1,18 @@
+fastapi
+uvicorn
+httpx
+
+# Database dependencies
+psycopg2-binary
+sqlalchemy
+alembic
+
+# Redis dependencies
+redis
+hiredis
+
+# Additional useful packages
+pydantic-settings
+python-dotenv
+requests
+gunicorn

@@ -1,0 +1,99 @@
+services:
+  # FastAPI Application
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    container_name: aiqa-agent-app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      # Database configuration
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/aiqa_agent
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=aiqa_agent
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      
+      # Redis configuration
+      - REDIS_URL=redis://:redis123@redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      
+      # Application environment
+      - ENVIRONMENT=development
+      - DEBUG=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - aiqa-network
+    volumes:
+      - ../:/workspace:cached
+    working_dir: /workspace
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: aiqa-agent-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=aiqa_agent
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aiqa-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aiqa_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Redis Cache/Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: aiqa-agent-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass redis123
+    environment:
+      - REDIS_PASSWORD=redis123
+    volumes:
+      - redis_data:/data
+    networks:
+      - aiqa-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+# Named volumes for data persistence
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+# Custom network for service communication
+networks:
+  aiqa-network:
+    driver: bridge

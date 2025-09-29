@@ -4,12 +4,13 @@ Description: 'EC2 deployment with FastAPI, PostgreSQL, and Redis'
 Parameters:
   InstanceType:
     Type: String
-    Default: t3.medium
+    Default: t3.micro
     AllowedValues:
+      - t3.micro
       - t3.small
       - t3.medium
       - t3.large
-    Description: EC2 instance type
+    Description: EC2 instance type (WARNING - t3.micro may crash with DB+Redis+App)
 
   KeyPairName:
     Type: String
@@ -188,10 +189,12 @@ Resources:
           docker rm aiqa-agent-app aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
           
           # Start PostgreSQL container
-          echo "=== Starting PostgreSQL container ==="
+          echo "=== Starting PostgreSQL container (memory-limited) ==="
           docker run -d \
             --name aiqa-agent-postgres \
             --network aiqa-network \
+            --memory="300m" \
+            --memory-swap="300m" \
             -e POSTGRES_DB=aiqa_agent \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=${PostgresPassword} \
@@ -200,8 +203,8 @@ Resources:
             -v /opt/aiqa-agent/postgres_data:/var/lib/postgresql/data \
             --restart unless-stopped \
             --log-driver json-file \
-            --log-opt max-size=10m \
-            --log-opt max-file=3 \
+            --log-opt max-size=5m \
+            --log-opt max-file=2 \
             --health-cmd="pg_isready -U postgres -d aiqa_agent" \
             --health-interval=30s \
             --health-timeout=10s \
@@ -215,23 +218,25 @@ Resources:
           fi
           
           # Start Redis container
-          echo "=== Starting Redis container ==="
+          echo "=== Starting Redis container (memory-limited) ==="
           docker run -d \
             --name aiqa-agent-redis \
             --network aiqa-network \
+            --memory="150m" \
+            --memory-swap="150m" \
             -e REDIS_PASSWORD=${RedisPassword} \
             -v /opt/aiqa-agent/redis_data:/data \
             --restart unless-stopped \
             --log-driver json-file \
-            --log-opt max-size=10m \
-            --log-opt max-file=3 \
+            --log-opt max-size=5m \
+            --log-opt max-file=2 \
             --health-cmd="redis-cli --raw incr ping" \
             --health-interval=30s \
             --health-timeout=5s \
             --health-retries=5 \
             --health-start-period=10s \
             redis:7-alpine \
-            redis-server --appendonly yes --requirepass ${RedisPassword} --maxmemory 256mb --maxmemory-policy allkeys-lru
+            redis-server --appendonly yes --requirepass ${RedisPassword} --maxmemory 100mb --maxmemory-policy allkeys-lru
           
           if [ $? -ne 0 ]; then
             echo "ERROR: Failed to start Redis container"
@@ -260,10 +265,12 @@ Resources:
           done
           
           # Start application container
-          echo "=== Starting Application container ==="
+          echo "=== Starting Application container (memory-limited) ==="
           docker run -d \
             --name aiqa-agent-app \
             --network aiqa-network \
+            --memory="400m" \
+            --memory-swap="400m" \
             -p 8000:8000 \
             -p 80:8000 \
             -e ENVIRONMENT=production \
@@ -293,8 +300,8 @@ Resources:
             -v /opt/aiqa-agent/logs:/app/logs \
             --restart unless-stopped \
             --log-driver json-file \
-            --log-opt max-size=10m \
-            --log-opt max-file=3 \
+            --log-opt max-size=5m \
+            --log-opt max-file=2 \
             --health-cmd="curl -f http://localhost:8000/health || exit 1" \
             --health-interval=30s \
             --health-timeout=10s \
@@ -311,6 +318,10 @@ Resources:
           sleep 10
           echo "=== Verifying containers ==="
           docker ps
+          
+          echo "=== Memory Usage ==="
+          free -h
+          docker stats --no-stream
           
           if docker ps | grep -q aiqa-agent-postgres; then
             echo "✓ PostgreSQL container is running"

@@ -64,19 +64,54 @@ This repository contains a Python FastAPI web application for retrieving Jira is
 
 ### Deployment
 
-4. Run the commands below:
+4. Push new image to registry:
     ```bash
-    docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.production -t aiqa-agent-app:latest .
+    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --region us-east-1)
     
-    # 3. Get ECR info
-    ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --region us-east-2)
-    ECR_URI="${ACCOUNT_ID}.dkr.ecr.us-east-2.amazonaws.com/aiqa-agent-app"
-    
-    # 4. Tag and push
-    docker tag aiqa-agent-app:latest ${ECR_URI}:latest
-    docker push ${ECR_URI}:latest
+    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+ 
+    ECR_IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/aiqa-agent-app:v4"
+      
+    docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.production -t aiqa-agent-app:v4 .
+
+    docker tag aiqa-agent-app:v4 $ECR_IMAGE_URI
+   
+    docker push $ECR_IMAGE_URI
     ```
 
+5. Create new stack (first time):
+    ```bash
+    aws cloudformation create-stack \
+      --stack-name aiqa-agent-stack \
+      --template-body file://simple-ec2-deployment.yaml \
+      --parameters \
+        ParameterKey=InstanceType,ParameterValue=t3.micro \
+        ParameterKey=KeyPairName,ParameterValue=aiqa-agent-keypair \
+        ParameterKey=ECRImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-app --query 'repositories[0].repositoryUri' --output text):latest \
+        ParameterKey=AllowedCIDR,ParameterValue=0.0.0.0/0 \
+        ParameterKey=PostgresPassword,ParameterValue=postgres \
+        ParameterKey=RedisPassword,ParameterValue=redis123 \
+        ParameterKey=SecretKey,ParameterValue=your-random-secret-key-here \
+      --capabilities CAPABILITY_NAMED_IAM
+
+    ```
+
+6. Update stack:
+    ```bash
+    aws cloudformation update-stack \
+      --stack-name aiqa-agent-stack \
+      --region us-east-1 \
+      --use-previous-template \
+      --parameters \
+        ParameterKey=ECRImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-app --query 'repositories[0].repositoryUri' --output text):v4 \
+        ParameterKey=InstanceType,UsePreviousValue=true \
+        ParameterKey=KeyPairName,UsePreviousValue=true \
+        ParameterKey=AllowedCIDR,UsePreviousValue=true \
+        ParameterKey=PostgresPassword,UsePreviousValue=true \
+        ParameterKey=RedisPassword,UsePreviousValue=true \
+        ParameterKey=SecretKey,UsePreviousValue=true \
+      --capabilities CAPABILITY_NAMED_IAM
+    ```
 ## Testing
 
 - Tests are located in `test_main.py`.

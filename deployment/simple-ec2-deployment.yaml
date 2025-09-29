@@ -109,6 +109,45 @@ Resources:
       Roles:
         - !Ref EC2Role
 
+  TaskQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: aiqa-agent-task-queue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      Tags:
+        - Key: Name
+          Value: aiqa-agent-task-queue
+        - Key: Application
+          Value: aiqa-agent
+
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: aiqa-agent-dlq
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Name
+          Value: aiqa-agent-dlq
+
+  TaskQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref TaskQueue
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !GetAtt EC2Role.Arn
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+            Resource: !GetAtt TaskQueue.Arn
+
   ElasticIP:
     Type: AWS::EC2::EIP
     Properties:
@@ -291,6 +330,8 @@ Resources:
             -e REDIS_PASSWORD=${RedisPassword} \
             -e SECRET_KEY=${SecretKey} \
             -e ALLOWED_HOSTS=* \
+            -e SQS_QUEUE_URL=${TaskQueue} \
+            -e SQS_DLQ_URL=${DeadLetterQueue} \
             -e ATLASSIAN_API_TOKEN=MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR \
             -e JIRA_BASE_URL=jira-staging.wgu.edu \
             -e JIRA_TIMEOUT=30 \
@@ -438,6 +479,20 @@ Outputs:
   RedisConnection:
     Description: 'Redis connection from inside EC2'
     Value: 'docker exec -it aiqa-agent-redis redis-cli -a [password]'
+
+  SQSQueueURL:
+    Description: 'SQS Task Queue URL'
+    Value: !Ref TaskQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-TaskQueueURL'
+
+  SQSQueueARN:
+    Description: 'SQS Task Queue ARN'
+    Value: !GetAtt TaskQueue.Arn
+
+  DeadLetterQueueURL:
+    Description: 'SQS Dead Letter Queue URL'
+    Value: !Ref DeadLetterQueue
 
   UserDataLog:
     Description: 'Command to view UserData execution log'

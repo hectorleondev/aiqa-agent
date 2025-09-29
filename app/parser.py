@@ -11,6 +11,7 @@ ATLASSIAN_API_TOKEN = os.getenv("ATLASSIAN_API_TOKEN")
 JIRA_BASE_URL = os.getenv("JIRA_BASE_URL")
 database_url = os.getenv("DATABASE_URL")
 redis_url = os.getenv("REDIS_URL")
+queue_url = os.environ.get('SQS_QUEUE_URL')
 
 
 def create_jira_headers(api_token):
@@ -144,5 +145,6 @@ def check_status():
     return {
         "database": "connected",
         "cache": "connected",
+        "sqs_url": queue_url,
         "message": "All systems operational",
     }

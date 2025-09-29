@@ -74,7 +74,7 @@ This repository contains a Python FastAPI web application for retrieving Jira is
       
     docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.production -t aiqa-agent-app:v4 .
 
-    docker tag aiqa-agent-app:v4 $ECR_IMAGE_URI
+    docker tag aiqa-agent-app:v5 $ECR_IMAGE_URI
    
     docker push $ECR_IMAGE_URI
     ```

@@ -12,7 +12,9 @@ redis
 hiredis
 
 # Additional useful packages
-pydantic-settings
+pydantic_settings
 python-dotenv
 requests
 gunicorn
+
+pydantic

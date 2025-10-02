@@ -5,7 +5,6 @@ import os
 
 
 class Settings(BaseSettings):
-
     environment: str = "development"
 
     # Jira
@@ -19,6 +18,7 @@ class Settings(BaseSettings):
     redis_url: str
 
     # AWS Service
+    aws_region: str = "us-east-1"
     sqs_queue_url: str
 
     # App

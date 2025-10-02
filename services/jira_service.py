@@ -18,7 +18,7 @@ class JiraService:
             description=fields.get("description"),
             story_points=fields.get("customfield_10018"),
             acceptance_criteria=fields.get("customfield_11518"),
-            epic_link=epic.get("self") if epic else None
+            epic_link=epic.get("self") if epic else None,
         )
 
     def update_issue_fields(self, issue_key: str, data: dict) -> dict:

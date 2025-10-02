@@ -14,7 +14,7 @@ class HealthService:
         return HealthCheckResponse(
             status="healthy",
             message=f"{self.settings.app_name} is running smoothly",
-            time=datetime.now().isoformat()
+            time=datetime.now().isoformat(),
         )
 
     def get_system_status(self) -> SystemStatusResponse:
@@ -29,5 +29,5 @@ class HealthService:
             database="connected",
             cache="connected",
             sqs_url=self.settings.sqs_queue_url,
-            message="All systems operational"
+            message="All systems operational",
         )

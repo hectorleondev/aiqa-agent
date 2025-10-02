@@ -1,10 +1,12 @@
 from pydantic import BaseModel
 from typing import Optional
 
+
 class HealthCheckResponse(BaseModel):
     status: str
     message: str
     time: str
+
 
 class SystemStatusResponse(BaseModel):
     database: str

@@ -8,7 +8,7 @@ router = APIRouter(tags=["Health"])
 
 @router.get("/health", response_model=HealthCheckResponse, status_code=200)
 async def health_check(
-        health_service: HealthService = Depends(get_health_service)
+    health_service: HealthService = Depends(get_health_service),
 ) -> HealthCheckResponse:
     """
     Simple health check endpoint.
@@ -22,7 +22,7 @@ async def health_check(
 
 @router.get("/cache-status", response_model=SystemStatusResponse, status_code=200)
 async def cache_status(
-        health_service: HealthService = Depends(get_health_service)
+    health_service: HealthService = Depends(get_health_service),
 ) -> SystemStatusResponse:
     """
     Detailed system status check.

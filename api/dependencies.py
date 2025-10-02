@@ -17,13 +17,13 @@ def get_jira_service(
 
 
 def get_health_repository(
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings),
 ) -> HealthRepository:
     return HealthRepository(settings)
 
 
 def get_health_service(
     health_repo: HealthRepository = Depends(get_health_repository),
-    settings: Settings = Depends(get_settings)
+    settings: Settings = Depends(get_settings),
 ) -> HealthService:
     return HealthService(health_repo, settings)

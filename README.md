@@ -115,6 +115,22 @@ This repository contains a Python FastAPI web application for retrieving Jira is
         ParameterKey=SecretKey,UsePreviousValue=true \
       --capabilities CAPABILITY_NAMED_IAM
     ```
+
+7. Test deployment image locally (optional):
+    ```bash
+    docker run -d \
+      --name aiqa-agent \
+      --platform linux/amd64 \
+      -p 8000:8000 \
+      -e ENVIRONMENT=production \
+      -e ATLASSIAN_API_TOKEN="MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR" \
+      -e JIRA_BASE_URL="jira-staging.wgu.edu" \
+      -e DATABASE_URL="postgresql://postgres:postgres@host.docker.internal:5432/aiqa_agent" \
+      -e REDIS_URL="redis://:redis123@host.docker.internal:6379" \
+      -e SQS_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/123456789/your-queue" \
+      -e OPEN_API_KEY="test" \
+      aiqa-agent-app:latest
+    ```
 ## Testing
 
 - Tests are located in `test_main.py`.

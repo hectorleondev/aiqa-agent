@@ -74,12 +74,20 @@ This repository contains a Python FastAPI web application for retrieving Jira is
     aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
  
     ECR_IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/aiqa-agent-app:${NEW_VERSION}"
+   
+    ECR_WORKER_IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/aiqa-agent-worker:${NEW_VERSION}"
       
     docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.production -t aiqa-agent-app:${NEW_VERSION} .
 
+    docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.worker -t aiqa-agent-worker:${NEW_VERSION} .
+   
     docker tag aiqa-agent-app:${NEW_VERSION} $ECR_IMAGE_URI
    
+    docker tag aiqa-agent-worker:${NEW_VERSION} $ECR_WORKER_IMAGE_URI
+   
     docker push $ECR_IMAGE_URI
+   
+    docker push $ECR_WORKER_IMAGE_URI
     ```
 
 5. Create new stack (first time):
@@ -91,12 +99,13 @@ This repository contains a Python FastAPI web application for retrieving Jira is
         ParameterKey=InstanceType,ParameterValue=t3.micro \
         ParameterKey=KeyPairName,ParameterValue=aiqa-agent-keypair \
         ParameterKey=ECRImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-app --query 'repositories[0].repositoryUri' --output text):${NEW_VERSION} \
+        ParameterKey=ECRWorkerImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-worker --query 'repositories[0].repositoryUri' --output text):${NEW_VERSION} \
         ParameterKey=AllowedCIDR,ParameterValue=0.0.0.0/0 \
         ParameterKey=PostgresPassword,ParameterValue=postgres \
         ParameterKey=RedisPassword,ParameterValue=redis123 \
         ParameterKey=SecretKey,ParameterValue=your-random-secret-key-here \
-      --capabilities CAPABILITY_NAMED_IAM
-
+      --capabilities CAPABILITY_NAMED_IAM \
+      --region us-east-1
     ```
 
 6. Update stack:
@@ -107,13 +116,15 @@ This repository contains a Python FastAPI web application for retrieving Jira is
       --use-previous-template \
       --parameters \
         ParameterKey=ECRImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-app --query 'repositories[0].repositoryUri' --output text):${NEW_VERSION} \
+        ParameterKey=ECRWorkerImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-worker --query 'repositories[0].repositoryUri' --output text):${NEW_VERSION} \
         ParameterKey=InstanceType,UsePreviousValue=true \
         ParameterKey=KeyPairName,UsePreviousValue=true \
         ParameterKey=AllowedCIDR,UsePreviousValue=true \
         ParameterKey=PostgresPassword,UsePreviousValue=true \
         ParameterKey=RedisPassword,UsePreviousValue=true \
         ParameterKey=SecretKey,UsePreviousValue=true \
-      --capabilities CAPABILITY_NAMED_IAM
+      --capabilities CAPABILITY_NAMED_IAM \
+      --region us-east-1
     ```
 
 7. Test deployment image locally (optional):

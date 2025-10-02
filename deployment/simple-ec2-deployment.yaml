@@ -21,6 +21,11 @@ Parameters:
     Type: String
     Description: ECR image URI (e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/aiqa-agent-app:latest)
 
+  ECRWorkerImageURI:
+    Type: String
+    Description: ECR image URI for Worker (e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/aiqa-agent-worker:latest)
+    Default: ''  # Optional - if empty, uses same image as API
+
   AllowedCIDR:
     Type: String
     Default: 0.0.0.0/0
@@ -174,6 +179,7 @@ Resources:
           
           echo "=== Starting UserData Script ==="
           echo "ECR Image URI: ${ECRImageURI}"
+          echo "ECR Worker Image URI: ${ECRWorkerImageURI}"
           echo "Region: ${AWS::Region}"
           
           # Update and install Docker
@@ -222,10 +228,24 @@ Resources:
             exit 1
           fi
           
+          # Pull worker image (use same image if not specified)
+          WORKER_IMAGE="${ECRWorkerImageURI}"
+          if [ -z "$WORKER_IMAGE" ]; then
+            echo "=== Using same image for worker as API ==="
+            WORKER_IMAGE="${ECRImageURI}"
+          else
+            echo "=== Pulling Worker Docker image: $WORKER_IMAGE ==="
+            docker pull $WORKER_IMAGE
+            if [ $? -ne 0 ]; then
+              echo "ERROR: Failed to pull Worker Docker image"
+              exit 1
+            fi
+          fi
+          
           # Stop and remove any existing containers
           echo "=== Cleaning up existing containers ==="
-          docker stop aiqa-agent-app aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
-          docker rm aiqa-agent-app aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
+          docker stop aiqa-agent-app aiqa-agent-worker aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
+          docker rm aiqa-agent-app aiqa-agent-worker aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
           
           # Start PostgreSQL container
           echo "=== Starting PostgreSQL container (memory-limited) ==="
@@ -356,6 +376,47 @@ Resources:
             exit 1
           fi
           
+          # Wait for API to be healthy before starting worker
+          echo "=== Waiting for API to be healthy ==="
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "API is healthy"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+          
+          # Start SQS Worker container
+          echo "=== Starting SQS Worker container (memory-limited) ==="
+          docker run -d \
+            --name aiqa-agent-worker \
+            --network aiqa-network \
+            --memory="250m" \
+            --memory-swap="250m" \
+            -e ENVIRONMENT=production \
+            -e OPEN_API_KEY=test \
+            -e DEBUG=false \
+            -e DATABASE_URL=postgresql://postgres:${PostgresPassword}@aiqa-agent-postgres:5432/aiqa_agent \
+            -e REDIS_URL=redis://:${RedisPassword}@aiqa-agent-redis:6379 \
+            -e SQS_QUEUE_URL=${TaskQueue} \
+            -e ATLASSIAN_API_TOKEN=MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR \
+            -e JIRA_BASE_URL=jira-staging.wgu.edu \
+            -e AWS_DEFAULT_REGION=${AWS::Region} \
+            -e AWS_REGION=${AWS::Region} \
+            -v /opt/aiqa-agent/worker_logs:/app/logs \
+            --restart unless-stopped \
+            --log-driver json-file \
+            --log-opt max-size=5m \
+            --log-opt max-file=2 \
+            $WORKER_IMAGE
+          
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to start Worker container"
+            docker logs aiqa-agent-worker
+            exit 1
+          fi
+          
           # Verify all containers are running
           sleep 10
           echo "=== Verifying containers ==="
@@ -365,27 +426,18 @@ Resources:
           free -h
           docker stats --no-stream
           
-          if docker ps | grep -q aiqa-agent-postgres; then
-            echo "✓ PostgreSQL container is running"
-          else
-            echo "ERROR: PostgreSQL container is not running"
-            docker logs aiqa-agent-postgres
-          fi
-          
-          if docker ps | grep -q aiqa-agent-redis; then
-            echo "✓ Redis container is running"
-          else
-            echo "ERROR: Redis container is not running"
-            docker logs aiqa-agent-redis
-          fi
-          
-          if docker ps | grep -q aiqa-agent-app; then
-            echo "✓ Application container is running"
-          else
-            echo "ERROR: Application container is not running"
-            docker logs aiqa-agent-app
-            exit 1
-          fi
+          # Verify each container
+          for container in aiqa-agent-postgres aiqa-agent-redis aiqa-agent-app aiqa-agent-worker; do
+            if docker ps | grep -q $container; then
+              echo "Container $container is running"
+            else
+              echo "ERROR: Container $container is not running"
+              docker logs $container
+              if [ "$container" = "aiqa-agent-app" ]; then
+                exit 1
+              fi
+            fi
+          done
           
           # Set proper permissions
           chown -R ec2-user:ec2-user /opt/aiqa-agent
@@ -401,8 +453,8 @@ Resources:
           [Service]
           Type=oneshot
           RemainAfterExit=yes
-          ExecStart=/bin/bash -c 'docker start aiqa-agent-postgres aiqa-agent-redis && sleep 10 && docker start aiqa-agent-app'
-          ExecStop=/bin/bash -c 'docker stop aiqa-agent-app aiqa-agent-redis aiqa-agent-postgres'
+          ExecStart=/bin/bash -c 'docker start aiqa-agent-postgres aiqa-agent-redis && sleep 15 && docker start aiqa-agent-app && sleep 10 && docker start aiqa-agent-worker'
+          ExecStop=/bin/bash -c 'docker stop aiqa-agent-worker aiqa-agent-app aiqa-agent-redis aiqa-agent-postgres'
           
           [Install]
           WantedBy=multi-user.target
@@ -420,6 +472,7 @@ Resources:
           cat > /opt/aiqa-agent/deployment-info.txt << INFOEOF
           Deployment Date: $(date)
           Image URI: ${ECRImageURI}
+          Worker Image URI: $WORKER_IMAGE
           Region: ${AWS::Region}
           Stack Name: ${AWS::StackName}
           PostgreSQL: aiqa-agent-postgres (port 5432)
@@ -498,3 +551,15 @@ Outputs:
   UserDataLog:
     Description: 'Command to view UserData execution log'
     Value: 'ssh to instance and run: sudo cat /var/log/user-data.log'
+
+ WorkerLogsCommand:
+    Description: 'Command to view worker logs'
+    Value: 'ssh to instance and run: docker logs -f aiqa-agent-worker'
+
+  WorkerStatusCommand:
+    Description: 'Command to check worker status'
+    Value: 'ssh to instance and run: docker ps | grep worker'
+
+  AllContainersStatus:
+    Description: 'Command to check all container statuses'
+    Value: 'ssh to instance and run: docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'

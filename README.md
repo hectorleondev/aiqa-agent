@@ -75,9 +75,9 @@ This repository contains a Python FastAPI web application for retrieving Jira is
  
     ECR_IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/aiqa-agent-app:${NEW_VERSION}"
       
-    docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.production -t aiqa-agent-app:latest .
+    docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.production -t aiqa-agent-app:${NEW_VERSION} .
 
-    docker tag aiqa-agent-app:latest $ECR_IMAGE_URI
+    docker tag aiqa-agent-app:${NEW_VERSION} $ECR_IMAGE_URI
    
     docker push $ECR_IMAGE_URI
     ```
@@ -129,7 +129,7 @@ This repository contains a Python FastAPI web application for retrieving Jira is
       -e REDIS_URL="redis://:redis123@host.docker.internal:6379" \
       -e SQS_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/123456789/your-queue" \
       -e OPEN_API_KEY="test" \
-      aiqa-agent-app:latest
+      aiqa-agent-app:${NEW_VERSION}
     ```
 ## Testing
 

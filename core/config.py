@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from typing import Optional
 import os
 
 
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
     app_name: str = "IA QA AGENT"
 
     # OpenAI
-    open_api_key: str
+    open_ai_api_key: Optional[str] = None
 
     class Config:
         env_file = None if os.getenv("ENVIRONMENT") == "production" else ".env"

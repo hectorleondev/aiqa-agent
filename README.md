@@ -66,15 +66,18 @@ This repository contains a Python FastAPI web application for retrieving Jira is
 
 4. Push new image to registry:
     ```bash
+   
+    NEW_VERSION="v1"
+   
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --region us-east-1)
     
     aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
  
-    ECR_IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/aiqa-agent-app:v4"
+    ECR_IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/aiqa-agent-app:${NEW_VERSION}"
       
-    docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.production -t aiqa-agent-app:v4 .
+    docker build --no-cache --platform linux/amd64 -f deployment/Dockerfile.production -t aiqa-agent-app:${NEW_VERSION} .
 
-    docker tag aiqa-agent-app:v5 $ECR_IMAGE_URI
+    docker tag aiqa-agent-app:${NEW_VERSION} $ECR_IMAGE_URI
    
     docker push $ECR_IMAGE_URI
     ```
@@ -83,11 +86,11 @@ This repository contains a Python FastAPI web application for retrieving Jira is
     ```bash
     aws cloudformation create-stack \
       --stack-name aiqa-agent-stack \
-      --template-body file://simple-ec2-deployment.yaml \
+      --template-body file://deployment/simple-ec2-deployment.yaml \
       --parameters \
         ParameterKey=InstanceType,ParameterValue=t3.micro \
         ParameterKey=KeyPairName,ParameterValue=aiqa-agent-keypair \
-        ParameterKey=ECRImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-app --query 'repositories[0].repositoryUri' --output text):latest \
+        ParameterKey=ECRImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-app --query 'repositories[0].repositoryUri' --output text):${NEW_VERSION} \
         ParameterKey=AllowedCIDR,ParameterValue=0.0.0.0/0 \
         ParameterKey=PostgresPassword,ParameterValue=postgres \
         ParameterKey=RedisPassword,ParameterValue=redis123 \
@@ -103,7 +106,7 @@ This repository contains a Python FastAPI web application for retrieving Jira is
       --region us-east-1 \
       --use-previous-template \
       --parameters \
-        ParameterKey=ECRImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-app --query 'repositories[0].repositoryUri' --output text):v4 \
+        ParameterKey=ECRImageURI,ParameterValue=$(aws ecr describe-repositories --repository-name aiqa-agent-app --query 'repositories[0].repositoryUri' --output text):${NEW_VERSION} \
         ParameterKey=InstanceType,UsePreviousValue=true \
         ParameterKey=KeyPairName,UsePreviousValue=true \
         ParameterKey=AllowedCIDR,UsePreviousValue=true \
@@ -111,6 +114,22 @@ This repository contains a Python FastAPI web application for retrieving Jira is
         ParameterKey=RedisPassword,UsePreviousValue=true \
         ParameterKey=SecretKey,UsePreviousValue=true \
       --capabilities CAPABILITY_NAMED_IAM
+    ```
+
+7. Test deployment image locally (optional):
+    ```bash
+    docker run -d \
+      --name aiqa-agent \
+      --platform linux/amd64 \
+      -p 8000:8000 \
+      -e ENVIRONMENT=production \
+      -e ATLASSIAN_API_TOKEN="MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR" \
+      -e JIRA_BASE_URL="jira-staging.wgu.edu" \
+      -e DATABASE_URL="postgresql://postgres:postgres@host.docker.internal:5432/aiqa_agent" \
+      -e REDIS_URL="redis://:redis123@host.docker.internal:6379" \
+      -e SQS_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/123456789/your-queue" \
+      -e OPEN_API_KEY="test" \
+      aiqa-agent-app:${NEW_VERSION}
     ```
 ## Testing
 

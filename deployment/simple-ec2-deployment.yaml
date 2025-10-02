@@ -313,6 +313,7 @@ Resources:
             -p 8000:8000 \
             -p 80:8000 \
             -e ENVIRONMENT=production \
+            -e OPEN_AI_API_KEY=test \
             -e DEBUG=false \
             -e USE_DATABASE=true \
             -e USE_REDIS=true \

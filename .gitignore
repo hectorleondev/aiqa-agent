@@ -6,9 +6,7 @@
 .env.production
 .env.staging
 .venv
-env.txt/
 venv/
-env.txt/
 env.bak/
 venv.bak/
 

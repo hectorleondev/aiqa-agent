@@ -162,338 +162,326 @@ Resources:
           Value: aiqa-agent-simple-eip
 
   WebServerInstance:
-    Type: AWS::EC2::Instance
-    Properties:
-      ImageId: ami-0c02fb55956c7d316
-      InstanceType: !Ref InstanceType
-      KeyName: !Ref KeyPairName
-      SecurityGroupIds:
-        - !Ref WebSecurityGroup
-      IamInstanceProfile: !Ref EC2InstanceProfile
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          set -e
-          exec > >(tee /var/log/user-data.log)
-          exec 2>&1
-          
-          echo "=== Starting UserData Script ==="
-          echo "ECR Image URI: ${ECRImageURI}"
-          echo "ECR Worker Image URI: ${ECRWorkerImageURI}"
-          echo "Region: ${AWS::Region}"
-          
-          # Update and install Docker
-          echo "=== Installing Docker ==="
-          yum update -y
-          yum install -y docker
-          systemctl start docker
-          systemctl enable docker
-          usermod -a -G docker ec2-user
-          
-          # Install AWS CLI v2
-          echo "=== Installing AWS CLI v2 ==="
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          ./aws/install
-          rm -rf aws awscliv2.zip
-          
-          # Create application directories
-          echo "=== Setting up application directories ==="
-          mkdir -p /opt/aiqa-agent/{app_data,logs,postgres_data,redis_data}
-          cd /opt/aiqa-agent
-          
-          # Create Docker network
-          echo "=== Creating Docker network ==="
-          docker network create aiqa-network || true
-          
-          # Extract registry URL from ECR image URI
-          REGISTRY_URL=$(echo "${ECRImageURI}" | cut -d'/' -f1)
-          echo "Registry URL: $REGISTRY_URL"
-          
-          # Login to ECR
-          echo "=== Logging into ECR ==="
-          aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin $REGISTRY_URL
-          
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to login to ECR"
-            exit 1
-          fi
-          
-          # Pull the application image
-          echo "=== Pulling Docker image: ${ECRImageURI} ==="
-          docker pull ${ECRImageURI}
-          
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to pull Docker image"
-            exit 1
-          fi
-          
-          # Pull worker image (use same image if not specified)
-          WORKER_IMAGE="${ECRWorkerImageURI}"
-          if [ -z "$WORKER_IMAGE" ]; then
-            echo "=== Using same image for worker as API ==="
-            WORKER_IMAGE="${ECRImageURI}"
-          else
-            echo "=== Pulling Worker Docker image: $WORKER_IMAGE ==="
-            docker pull $WORKER_IMAGE
+      Type: AWS::EC2::Instance
+      Properties:
+        ImageId: ami-0c02fb55956c7d316
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPairName
+        SecurityGroupIds:
+          - !Ref WebSecurityGroup
+        IamInstanceProfile: !Ref EC2InstanceProfile
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -e
+            exec > >(tee /var/log/user-data.log)
+            exec 2>&1
+            
+            echo "=== Starting UserData Script ==="
+            echo "ECR API Image URI: ${ECRImageURI}"
+            echo "ECR Worker Image URI: ${ECRWorkerImageURI}"
+            echo "Region: ${AWS::Region}"
+            
+            # Update and install Docker
+            echo "=== Installing Docker ==="
+            yum update -y
+            yum install -y docker
+            systemctl start docker
+            systemctl enable docker
+            usermod -a -G docker ec2-user
+            
+            # Install AWS CLI v2
+            echo "=== Installing AWS CLI v2 ==="
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            ./aws/install
+            rm -rf aws awscliv2.zip
+            
+            # Create application directories
+            echo "=== Setting up application directories ==="
+            mkdir -p /opt/aiqa-agent/{app_data,logs,postgres_data,redis_data,worker_logs}
+            cd /opt/aiqa-agent
+            
+            # Create Docker network
+            echo "=== Creating Docker network ==="
+            docker network create aiqa-network || true
+            
+            # Extract registry URL from ECR image URI
+            REGISTRY_URL=$(echo "${ECRImageURI}" | cut -d'/' -f1)
+            echo "Registry URL: $REGISTRY_URL"
+            
+            # Login to ECR
+            echo "=== Logging into ECR ==="
+            aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin $REGISTRY_URL
+            
             if [ $? -ne 0 ]; then
-              echo "ERROR: Failed to pull Worker Docker image"
+              echo "ERROR: Failed to login to ECR"
               exit 1
             fi
-          fi
-          
-          # Stop and remove any existing containers
-          echo "=== Cleaning up existing containers ==="
-          docker stop aiqa-agent-app aiqa-agent-worker aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
-          docker rm aiqa-agent-app aiqa-agent-worker aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
-          
-          # Start PostgreSQL container
-          echo "=== Starting PostgreSQL container (memory-limited) ==="
-          docker run -d \
-            --name aiqa-agent-postgres \
-            --network aiqa-network \
-            --memory="300m" \
-            --memory-swap="300m" \
-            -e POSTGRES_DB=aiqa_agent \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=${PostgresPassword} \
-            -e POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256" \
-            -e POSTGRES_HOST_AUTH_METHOD=scram-sha-256 \
-            -v /opt/aiqa-agent/postgres_data:/var/lib/postgresql/data \
-            --restart unless-stopped \
-            --log-driver json-file \
-            --log-opt max-size=5m \
-            --log-opt max-file=2 \
-            --health-cmd="pg_isready -U postgres -d aiqa_agent" \
-            --health-interval=30s \
-            --health-timeout=10s \
-            --health-retries=5 \
-            --health-start-period=40s \
-            postgres:15-alpine
-          
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to start PostgreSQL container"
-            exit 1
-          fi
-          
-          # Start Redis container
-          echo "=== Starting Redis container (memory-limited) ==="
-          docker run -d \
-            --name aiqa-agent-redis \
-            --network aiqa-network \
-            --memory="150m" \
-            --memory-swap="150m" \
-            -e REDIS_PASSWORD=${RedisPassword} \
-            -v /opt/aiqa-agent/redis_data:/data \
-            --restart unless-stopped \
-            --log-driver json-file \
-            --log-opt max-size=5m \
-            --log-opt max-file=2 \
-            --health-cmd="redis-cli --raw incr ping" \
-            --health-interval=30s \
-            --health-timeout=5s \
-            --health-retries=5 \
-            --health-start-period=10s \
-            redis:7-alpine \
-            redis-server --appendonly yes --requirepass ${RedisPassword} --maxmemory 100mb --maxmemory-policy allkeys-lru
-          
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to start Redis container"
-            exit 1
-          fi
-          
-          # Wait for PostgreSQL and Redis to be healthy
-          echo "=== Waiting for PostgreSQL to be healthy ==="
-          for i in {1..30}; do
-            if docker exec aiqa-agent-postgres pg_isready -U postgres -d aiqa_agent > /dev/null 2>&1; then
-              echo "PostgreSQL is healthy"
-              break
+            
+            # Pull the application image
+            echo "=== Pulling API Docker image: ${ECRImageURI} ==="
+            docker pull ${ECRImageURI}
+            
+            if [ $? -ne 0 ]; then
+              echo "ERROR: Failed to pull API Docker image"
+              exit 1
             fi
-            echo "Waiting for PostgreSQL... ($i/30)"
-            sleep 2
-          done
-          
-          echo "=== Waiting for Redis to be healthy ==="
-          for i in {1..30}; do
-            if docker exec aiqa-agent-redis redis-cli -a ${RedisPassword} ping > /dev/null 2>&1; then
-              echo "Redis is healthy"
-              break
-            fi
-            echo "Waiting for Redis... ($i/30)"
-            sleep 2
-          done
-          
-          # Start application container
-          echo "=== Starting Application container (memory-limited) ==="
-          docker run -d \
-            --name aiqa-agent-app \
-            --network aiqa-network \
-            --memory="400m" \
-            --memory-swap="400m" \
-            -p 8000:8000 \
-            -p 80:8000 \
-            -e ENVIRONMENT=production \
-            -e OPEN_AI_API_KEY=test \
-            -e DEBUG=false \
-            -e USE_DATABASE=true \
-            -e USE_REDIS=true \
-            -e CACHE_BACKEND=redis \
-            -e SESSION_BACKEND=redis \
-            -e DATABASE_URL=postgresql://postgres:${PostgresPassword}@aiqa-agent-postgres:5432/aiqa_agent \
-            -e POSTGRES_HOST=aiqa-agent-postgres \
-            -e POSTGRES_PORT=5432 \
-            -e POSTGRES_DB=aiqa_agent \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=${PostgresPassword} \
-            -e REDIS_URL=redis://:${RedisPassword}@aiqa-agent-redis:6379 \
-            -e REDIS_HOST=aiqa-agent-redis \
-            -e REDIS_PORT=6379 \
-            -e REDIS_PASSWORD=${RedisPassword} \
-            -e SECRET_KEY=${SecretKey} \
-            -e ALLOWED_HOSTS=* \
-            -e SQS_QUEUE_URL=${TaskQueue} \
-            -e SQS_DLQ_URL=${DeadLetterQueue} \
-            -e ATLASSIAN_API_TOKEN=MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR \
-            -e JIRA_BASE_URL=jira-staging.wgu.edu \
-            -e JIRA_TIMEOUT=30 \
-            -e JIRA_RETRIES=3 \
-            -e AWS_DEFAULT_REGION=${AWS::Region} \
-            -v /opt/aiqa-agent/app_data:/app/data \
-            -v /opt/aiqa-agent/logs:/app/logs \
-            --restart unless-stopped \
-            --log-driver json-file \
-            --log-opt max-size=5m \
-            --log-opt max-file=2 \
-            --health-cmd="curl -f http://localhost:8000/health || exit 1" \
-            --health-interval=30s \
-            --health-timeout=10s \
-            --health-retries=3 \
-            --health-start-period=60s \
-            ${ECRImageURI}
-          
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to start Application container"
-            exit 1
-          fi
-          
-          # Wait for API to be healthy before starting worker
-          echo "=== Waiting for API to be healthy ==="
-          for i in {1..30}; do
-            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-              echo "API is healthy"
-              break
-            fi
-            echo "Waiting for API... ($i/30)"
-            sleep 2
-          done
-          
-          # Start SQS Worker container
-          echo "=== Starting SQS Worker container (memory-limited) ==="
-          docker run -d \
-            --name aiqa-agent-worker \
-            --network aiqa-network \
-            --memory="250m" \
-            --memory-swap="250m" \
-            -e ENVIRONMENT=production \
-            -e OPEN_API_KEY=test \
-            -e DEBUG=false \
-            -e DATABASE_URL=postgresql://postgres:${PostgresPassword}@aiqa-agent-postgres:5432/aiqa_agent \
-            -e REDIS_URL=redis://:${RedisPassword}@aiqa-agent-redis:6379 \
-            -e SQS_QUEUE_URL=${TaskQueue} \
-            -e ATLASSIAN_API_TOKEN=MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR \
-            -e JIRA_BASE_URL=jira-staging.wgu.edu \
-            -e AWS_DEFAULT_REGION=${AWS::Region} \
-            -e AWS_REGION=${AWS::Region} \
-            -v /opt/aiqa-agent/worker_logs:/app/logs \
-            --restart unless-stopped \
-            --log-driver json-file \
-            --log-opt max-size=5m \
-            --log-opt max-file=2 \
-            $WORKER_IMAGE
-          
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to start Worker container"
-            docker logs aiqa-agent-worker
-            exit 1
-          fi
-          
-          # Verify all containers are running
-          sleep 10
-          echo "=== Verifying containers ==="
-          docker ps
-          
-          echo "=== Memory Usage ==="
-          free -h
-          docker stats --no-stream
-          
-          # Verify each container
-          for container in aiqa-agent-postgres aiqa-agent-redis aiqa-agent-app aiqa-agent-worker; do
-            if docker ps | grep -q $container; then
-              echo "Container $container is running"
+            
+            # Pull worker image (use same image if not specified)
+            WORKER_IMAGE="${ECRWorkerImageURI}"
+            if [ -z "$WORKER_IMAGE" ]; then
+              echo "=== Using same image for worker as API ==="
+              WORKER_IMAGE="${ECRImageURI}"
             else
-              echo "ERROR: Container $container is not running"
-              docker logs $container
-              if [ "$container" = "aiqa-agent-app" ]; then
+              echo "=== Pulling Worker Docker image: $WORKER_IMAGE ==="
+              docker pull $WORKER_IMAGE
+              if [ $? -ne 0 ]; then
+                echo "ERROR: Failed to pull Worker Docker image"
                 exit 1
               fi
             fi
-          done
-          
-          # Set proper permissions
-          chown -R ec2-user:ec2-user /opt/aiqa-agent
-          
-          # Create systemd service for all containers
-          echo "=== Creating systemd service ==="
-          cat > /etc/systemd/system/aiqa-agent.service << 'SERVICEEOF'
-          [Unit]
-          Description=AIQA Agent Application Stack
-          Requires=docker.service
-          After=docker.service
-          
-          [Service]
-          Type=oneshot
-          RemainAfterExit=yes
-          ExecStart=/bin/bash -c 'docker start aiqa-agent-postgres aiqa-agent-redis && sleep 15 && docker start aiqa-agent-app && sleep 10 && docker start aiqa-agent-worker'
-          ExecStop=/bin/bash -c 'docker stop aiqa-agent-worker aiqa-agent-app aiqa-agent-redis aiqa-agent-postgres'
-          
-          [Install]
-          WantedBy=multi-user.target
-          SERVICEEOF
-          
-          # Enable service
-          systemctl daemon-reload
-          systemctl enable aiqa-agent.service
-          
-          # Install CloudWatch agent
-          echo "=== Installing CloudWatch agent ==="
-          yum install -y amazon-cloudwatch-agent aws-cfn-bootstrap
-          
-          # Create deployment info file
-          cat > /opt/aiqa-agent/deployment-info.txt << INFOEOF
-          Deployment Date: $(date)
-          Image URI: ${ECRImageURI}
-          Worker Image URI: $WORKER_IMAGE
-          Region: ${AWS::Region}
-          Stack Name: ${AWS::StackName}
-          PostgreSQL: aiqa-agent-postgres (port 5432)
-          Redis: aiqa-agent-redis (port 6379)
-          Application: aiqa-agent-app (ports 80, 8000)
-          INFOEOF
-          
-          echo "=== UserData Script Completed Successfully ==="
-          
-          # Signal success to CloudFormation
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource WebServerInstance --region ${AWS::Region}
+            
+            # Stop and remove any existing containers
+            echo "=== Cleaning up existing containers ==="
+            docker stop aiqa-agent-app aiqa-agent-worker aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
+            docker rm aiqa-agent-app aiqa-agent-worker aiqa-agent-postgres aiqa-agent-redis 2>/dev/null || true
+            
+            # Start PostgreSQL container
+            echo "=== Starting PostgreSQL container (memory-limited) ==="
+            docker run -d \
+              --name aiqa-agent-postgres \
+              --network aiqa-network \
+              --memory="300m" \
+              --memory-swap="300m" \
+              -e POSTGRES_DB=aiqa_agent \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=${PostgresPassword} \
+              -e POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256" \
+              -e POSTGRES_HOST_AUTH_METHOD=scram-sha-256 \
+              -v /opt/aiqa-agent/postgres_data:/var/lib/postgresql/data \
+              --restart unless-stopped \
+              --log-driver json-file \
+              --log-opt max-size=5m \
+              --log-opt max-file=2 \
+              --health-cmd="pg_isready -U postgres -d aiqa_agent" \
+              --health-interval=30s \
+              --health-timeout=10s \
+              --health-retries=5 \
+              --health-start-period=40s \
+              postgres:15-alpine
+            
+            if [ $? -ne 0 ]; then
+              echo "ERROR: Failed to start PostgreSQL container"
+              exit 1
+            fi
+            
+            # Start Redis container
+            echo "=== Starting Redis container (memory-limited) ==="
+            docker run -d \
+              --name aiqa-agent-redis \
+              --network aiqa-network \
+              --memory="150m" \
+              --memory-swap="150m" \
+              -e REDIS_PASSWORD=${RedisPassword} \
+              -v /opt/aiqa-agent/redis_data:/data \
+              --restart unless-stopped \
+              --log-driver json-file \
+              --log-opt max-size=5m \
+              --log-opt max-file=2 \
+              --health-cmd="redis-cli --raw incr ping" \
+              --health-interval=30s \
+              --health-timeout=5s \
+              --health-retries=5 \
+              --health-start-period=10s \
+              redis:7-alpine \
+              redis-server --appendonly yes --requirepass ${RedisPassword} --maxmemory 100mb --maxmemory-policy allkeys-lru
+            
+            if [ $? -ne 0 ]; then
+              echo "ERROR: Failed to start Redis container"
+              exit 1
+            fi
+            
+            # Wait for PostgreSQL and Redis to be healthy
+            echo "=== Waiting for PostgreSQL to be healthy ==="
+            for i in {1..30}; do
+              if docker exec aiqa-agent-postgres pg_isready -U postgres -d aiqa_agent > /dev/null 2>&1; then
+                echo "PostgreSQL is healthy"
+                break
+              fi
+              echo "Waiting for PostgreSQL... ($i/30)"
+              sleep 2
+            done
+            
+            echo "=== Waiting for Redis to be healthy ==="
+            for i in {1..30}; do
+              if docker exec aiqa-agent-redis redis-cli -a ${RedisPassword} ping > /dev/null 2>&1; then
+                echo "Redis is healthy"
+                break
+              fi
+              echo "Waiting for Redis... ($i/30)"
+              sleep 2
+            done
+            
+            # Start application container
+            echo "=== Starting Application container (memory-limited) ==="
+            docker run -d \
+              --name aiqa-agent-app \
+              --network aiqa-network \
+              --memory="350m" \
+              --memory-swap="350m" \
+              -p 8000:8000 \
+              -p 80:8000 \
+              -e ENVIRONMENT=production \
+              -e OPEN_API_KEY=test \
+              -e DEBUG=false \
+              -e DATABASE_URL=postgresql://postgres:${PostgresPassword}@aiqa-agent-postgres:5432/aiqa_agent \
+              -e REDIS_URL=redis://:${RedisPassword}@aiqa-agent-redis:6379 \
+              -e SQS_QUEUE_URL=${TaskQueue} \
+              -e ATLASSIAN_API_TOKEN=MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR \
+              -e JIRA_BASE_URL=jira-staging.wgu.edu \
+              -e AWS_DEFAULT_REGION=${AWS::Region} \
+              -e AWS_REGION=${AWS::Region} \
+              -v /opt/aiqa-agent/app_data:/app/data \
+              -v /opt/aiqa-agent/logs:/app/logs \
+              --restart unless-stopped \
+              --log-driver json-file \
+              --log-opt max-size=5m \
+              --log-opt max-file=2 \
+              --health-cmd="curl -f http://localhost:8000/health || exit 1" \
+              --health-interval=30s \
+              --health-timeout=10s \
+              --health-retries=3 \
+              --health-start-period=60s \
+              ${ECRImageURI}
+            
+            if [ $? -ne 0 ]; then
+              echo "ERROR: Failed to start Application container"
+              exit 1
+            fi
+            
+            # Wait for API to be healthy before starting worker
+            echo "=== Waiting for API to be healthy ==="
+            for i in {1..30}; do
+              if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+                echo "API is healthy"
+                break
+              fi
+              echo "Waiting for API... ($i/30)"
+              sleep 2
+            done
+            
+            # Start SQS Worker container
+            echo "=== Starting SQS Worker container (memory-limited) ==="
+            docker run -d \
+              --name aiqa-agent-worker \
+              --network aiqa-network \
+              --memory="250m" \
+              --memory-swap="250m" \
+              -e ENVIRONMENT=production \
+              -e OPEN_API_KEY=test \
+              -e DEBUG=false \
+              -e DATABASE_URL=postgresql://postgres:${PostgresPassword}@aiqa-agent-postgres:5432/aiqa_agent \
+              -e REDIS_URL=redis://:${RedisPassword}@aiqa-agent-redis:6379 \
+              -e SQS_QUEUE_URL=${TaskQueue} \
+              -e ATLASSIAN_API_TOKEN=MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR \
+              -e JIRA_BASE_URL=jira-staging.wgu.edu \
+              -e AWS_DEFAULT_REGION=${AWS::Region} \
+              -e AWS_REGION=${AWS::Region} \
+              -v /opt/aiqa-agent/worker_logs:/app/logs \
+              --restart unless-stopped \
+              --log-driver json-file \
+              --log-opt max-size=5m \
+              --log-opt max-file=2 \
+              $WORKER_IMAGE
+            
+            if [ $? -ne 0 ]; then
+              echo "ERROR: Failed to start Worker container"
+              docker logs aiqa-agent-worker
+              exit 1
+            fi
+            
+            # Verify all containers are running
+            sleep 10
+            echo "=== Verifying containers ==="
+            docker ps
+            
+            echo "=== Memory Usage ==="
+            free -h
+            docker stats --no-stream
+            
+            # Verify each container
+            for container in aiqa-agent-postgres aiqa-agent-redis aiqa-agent-app aiqa-agent-worker; do
+              if docker ps | grep -q $container; then
+                echo "Container $container is running"
+              else
+                echo "ERROR: Container $container is not running"
+                docker logs $container
+                if [ "$container" = "aiqa-agent-app" ]; then
+                  exit 1
+                fi
+              fi
+            done
+            
+            # Set proper permissions
+            chown -R ec2-user:ec2-user /opt/aiqa-agent
+            
+            # Create systemd service for all containers
+            echo "=== Creating systemd service ==="
+            cat > /etc/systemd/system/aiqa-agent.service << 'SERVICEEOF'
+            [Unit]
+            Description=AIQA Agent Application Stack
+            Requires=docker.service
+            After=docker.service
+            
+            [Service]
+            Type=oneshot
+            RemainAfterExit=yes
+            ExecStartPre=/bin/sleep 5
+            ExecStart=/bin/bash -c 'docker start aiqa-agent-postgres aiqa-agent-redis && sleep 15 && docker start aiqa-agent-app && sleep 10 && docker start aiqa-agent-worker'
+            ExecStop=/bin/bash -c 'docker stop aiqa-agent-worker aiqa-agent-app aiqa-agent-redis aiqa-agent-postgres'
+            Restart=on-failure
+            RestartSec=10
+            
+            [Install]
+            WantedBy=multi-user.target
+            SERVICEEOF
+            
+            # Enable service
+            systemctl daemon-reload
+            systemctl enable aiqa-agent.service
+            
+            # Install CloudWatch agent
+            echo "=== Installing CloudWatch agent ==="
+            yum install -y amazon-cloudwatch-agent aws-cfn-bootstrap
+            
+            # Create deployment info file
+            cat > /opt/aiqa-agent/deployment-info.txt << INFOEOF
+            Deployment Date: $(date)
+            API Image URI: ${ECRImageURI}
+            Worker Image URI: $WORKER_IMAGE
+            Region: ${AWS::Region}
+            Stack Name: ${AWS::StackName}
+            PostgreSQL: aiqa-agent-postgres (port 5432)
+            Redis: aiqa-agent-redis (port 6379)
+            Application: aiqa-agent-app (ports 80, 8000)
+            Worker: aiqa-agent-worker (SQS listener)
+            INFOEOF
+            
+            echo "=== UserData Script Completed Successfully ==="
+            
+            # Signal success to CloudFormation
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource WebServerInstance --region ${AWS::Region}
 
-      Tags:
-        - Key: Name
-          Value: aiqa-agent-simple-ec2
-        - Key: Application
-          Value: aiqa-agent
-    CreationPolicy:
-      ResourceSignal:
-        Count: 1
-        Timeout: PT15M
+        Tags:
+          - Key: Name
+            Value: aiqa-agent-simple-ec2
+          - Key: Application
+            Value: aiqa-agent
+      CreationPolicy:
+        ResourceSignal:
+          Count: 1
+          Timeout: PT15M
 
   EIPAssociation:
     Type: AWS::EC2::EIPAssociation
@@ -552,7 +540,7 @@ Outputs:
     Description: 'Command to view UserData execution log'
     Value: 'ssh to instance and run: sudo cat /var/log/user-data.log'
 
- WorkerLogsCommand:
+  WorkerLogsCommand:
     Description: 'Command to view worker logs'
     Value: 'ssh to instance and run: docker logs -f aiqa-agent-worker'
 

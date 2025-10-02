@@ -1,24 +1,33 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
-import os
+from typing import Optional
 
 
 class Settings(BaseSettings):
     # Jira
-    atlassian_api_token: str = os.getenv("ATLASSIAN_API_TOKEN")
-    jira_base_url: str = os.getenv("JIRA_BASE_URL")
+    atlassian_api_token: str
+    jira_base_url: str
 
-    # Database
-    database_url: str = os.getenv("DATABASE_URL")
+    # Database - single connection string
+    database_url: str
 
-    # Redis
-    redis_url: str = os.getenv("REDIS_URL")
+    # Redis - single connection string
+    redis_url: str
 
-    # AWS
-    sqs_queue_url: str = os.environ.get("SQS_QUEUE_URL")
+    # AWS Service
+    sqs_queue_url: str
 
     # App
     app_name: str = "IA QA AGENT"
+
+    # OpenAI
+    open_api_key: str
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+        extra = "ignore"  # Ignore extra fields in .env
 
 
 @lru_cache()

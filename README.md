@@ -104,6 +104,8 @@ This repository contains a Python FastAPI web application for retrieving Jira is
         ParameterKey=PostgresPassword,ParameterValue=postgres \
         ParameterKey=RedisPassword,ParameterValue=redis123 \
         ParameterKey=SecretKey,ParameterValue=your-random-secret-key-here \
+        ParameterKey=JiraApiToken,ParameterValue=your-jira-api-token \
+        ParameterKey=JiraBaseUrl,ParameterValue=your-jira-base-url \
       --capabilities CAPABILITY_NAMED_IAM \
       --region us-east-1
     ```
@@ -123,6 +125,8 @@ This repository contains a Python FastAPI web application for retrieving Jira is
         ParameterKey=PostgresPassword,UsePreviousValue=true \
         ParameterKey=RedisPassword,UsePreviousValue=true \
         ParameterKey=SecretKey,UsePreviousValue=true \
+        ParameterKey=JiraApiToken,UsePreviousValue=true \
+        ParameterKey=JiraBaseUrl,UsePreviousValue=true \
       --capabilities CAPABILITY_NAMED_IAM \
       --region us-east-1
     ```

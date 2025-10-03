@@ -142,6 +142,16 @@ This repository contains a Python FastAPI web application for retrieving Jira is
       -e OPEN_API_KEY="test" \
       aiqa-agent-app:${NEW_VERSION}
     ```
+
+## migrations
+    docker exec -it aiqa-agent-app alembic revision --autogenerate -m "create messages table"
+   
+    docker exec -it aiqa-agent-app alembic upgrade head
+   
+    docker exec -it aiqa-agent-postgres psql -U postgres -d aiqa_agent -c "\dt"
+   
+    docker exec -it aiqa-agent-postgres psql -U postgres -d aiqa_agent -c "SELECT * FROM messages;"
+
 ## Testing
 
 - Tests are located in `test_main.py`.

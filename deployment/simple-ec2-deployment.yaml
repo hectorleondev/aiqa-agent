@@ -49,6 +49,16 @@ Parameters:
     Default: your-secret-key-change-this-to-random-string
     Description: Application secret key
 
+  JiraApiToken:
+    Type: String
+    Default: jira-api-key
+    Description: Access key to access jira resources
+
+  JiraBaseUrl:
+    Type: String
+    Default: jira-base-url
+    Description: Jira dashboard url
+
 Resources:
   WebSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -338,8 +348,8 @@ Resources:
               -e DATABASE_URL=postgresql://postgres:${PostgresPassword}@aiqa-agent-postgres:5432/aiqa_agent \
               -e REDIS_URL=redis://:${RedisPassword}@aiqa-agent-redis:6379 \
               -e SQS_QUEUE_URL=${TaskQueue} \
-              -e ATLASSIAN_API_TOKEN=MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR \
-              -e JIRA_BASE_URL=jira-staging.wgu.edu \
+              -e ATLASSIAN_API_TOKEN=${JiraApiToken} \
+              -e JIRA_BASE_URL=${JiraBaseUrl} \
               -e AWS_DEFAULT_REGION=${AWS::Region} \
               -e AWS_REGION=${AWS::Region} \
               -v /opt/aiqa-agent/app_data:/app/data \
@@ -384,8 +394,8 @@ Resources:
               -e DATABASE_URL=postgresql://postgres:${PostgresPassword}@aiqa-agent-postgres:5432/aiqa_agent \
               -e REDIS_URL=redis://:${RedisPassword}@aiqa-agent-redis:6379 \
               -e SQS_QUEUE_URL=${TaskQueue} \
-              -e ATLASSIAN_API_TOKEN=MDY2NDE4MjM5MzYwOnvQog+EG1fhPSdOeKV4/dr6cDKR \
-              -e JIRA_BASE_URL=jira-staging.wgu.edu \
+              -e ATLASSIAN_API_TOKEN=${JiraApiToken} \
+              -e JIRA_BASE_URL=${JiraBaseUrl} \
               -e AWS_DEFAULT_REGION=${AWS::Region} \
               -e AWS_REGION=${AWS::Region} \
               -v /opt/aiqa-agent/worker_logs:/app/logs \

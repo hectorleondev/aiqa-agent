@@ -210,6 +210,11 @@ Resources:
             # Create application directories
             echo "=== Setting up application directories ==="
             mkdir -p /opt/aiqa-agent/{app_data,logs,postgres_data,redis_data,worker_logs}
+            
+            # Set proper permissions for PostgreSQL and Redis
+            chown -R 999:999 /opt/aiqa-agent/postgres_data
+            chown -R 999:999 /opt/aiqa-agent/redis_data
+
             cd /opt/aiqa-agent
             
             # Create Docker network

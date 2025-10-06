@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Dict
 from repositories.sqs_repository import SQSRepository
 from repositories.message_repository import MessageRepository
@@ -8,10 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 class SQSProcessorService:
-    def __init__(self, sqs_repo: SQSRepository, message_repo: MessageRepository ):
+    def __init__(self, sqs_repo: SQSRepository, message_repo: MessageRepository):
         self.sqs_repo = sqs_repo
         self.message_repo = message_repo
-
 
     def process_message(self, message: Dict) -> bool:
         """
@@ -23,23 +23,19 @@ class SQSProcessorService:
         try:
             # Parse message body
             body = json.loads(message.get("Body", "{}"))
-            message_id = message.get("MessageId")
+            sqs_message_id = message.get("MessageId")
             receipt_handle = message.get("ReceiptHandle")
+            logger.info(f"Processing sqs message {sqs_message_id}: {body}")
 
-            # Store message in database
-            db_message = self.message_repo.create(
-                issue_key=body.get('issue_key'),
-                body=json.dumps(body),
-                status="processing"
-            )
+            message_id = body.get("message_id", 0)
+            wait_seconds = body.get("wait_seconds", 0)
 
-            logger.info(f"Processing message {message_id}: {body}")
-
-            self.message_repo.update_status(db_message.id, "completed")
+            time.sleep(wait_seconds)
+            self.message_repo.update_status(message_id, "completed", sqs_message_id)
 
             # Delete message after successful processing
             self.sqs_repo.delete_message(receipt_handle)
-            logger.info(f"Successfully processed and deleted message {message_id}")
+            logger.info(f"Successfully processed and deleted message {sqs_message_id}")
 
             return True
 

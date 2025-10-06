@@ -12,10 +12,7 @@ class MessageRepository:
     def create(self, issue_key: str, body: str, status: str = "pending") -> Message:
         """Create a new message"""
         message = Message(
-            issue_key=issue_key,
-            body=body,
-            status=status,
-            start_date=datetime.utcnow()
+            issue_key=issue_key, body=body, status=status, start_date=datetime.utcnow()
         )
         self.db.add(message)
         self.db.commit()
@@ -30,10 +27,13 @@ class MessageRepository:
         """Get all messages for an issue"""
         return self.db.query(Message).filter(Message.issue_key == issue_key).all()
 
-    def update_status(self, message_id: int, status: str) -> Optional[Message]:
+    def update_status(
+        self, message_id: int, status: str, body: str
+    ) -> Optional[Message]:
         """Update message status"""
         message = self.get_by_id(message_id)
         if message:
+            message.body = body if body else message.body
             message.status = status
             if status in ["completed", "failed"]:
                 message.end_date = datetime.utcnow()

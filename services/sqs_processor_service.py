@@ -2,13 +2,16 @@ import json
 import logging
 from typing import Dict
 from repositories.sqs_repository import SQSRepository
+from repositories.message_repository import MessageRepository
 
 logger = logging.getLogger(__name__)
 
 
 class SQSProcessorService:
-    def __init__(self, sqs_repo: SQSRepository):
+    def __init__(self, sqs_repo: SQSRepository, message_repo: MessageRepository ):
         self.sqs_repo = sqs_repo
+        self.message_repo = message_repo
+
 
     def process_message(self, message: Dict) -> bool:
         """
@@ -23,7 +26,16 @@ class SQSProcessorService:
             message_id = message.get("MessageId")
             receipt_handle = message.get("ReceiptHandle")
 
+            # Store message in database
+            db_message = self.message_repo.create(
+                issue_key=body.get('issue_key'),
+                body=json.dumps(body),
+                status="processing"
+            )
+
             logger.info(f"Processing message {message_id}: {body}")
+
+            self.message_repo.update_status(db_message.id, "completed")
 
             # Delete message after successful processing
             self.sqs_repo.delete_message(receipt_handle)

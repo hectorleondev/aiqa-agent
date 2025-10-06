@@ -130,6 +130,21 @@ This repository contains a Python FastAPI web application for retrieving Jira is
       --capabilities CAPABILITY_NAMED_IAM \
       --region us-east-1
     ```
+
+## migrations
+
+1. Generate new migration (only local):
+    ```bash
+    docker exec -it aiqa-agent-app alembic revision --autogenerate -m "create messages table"
+    ```
+2. Run new migration in container 
+    ```bash
+    docker exec -it aiqa-agent-app alembic upgrade head
+   
+    docker exec -it aiqa-agent-postgres psql -U postgres -d aiqa_agent -c "\dt"
+   
+    docker exec -it aiqa-agent-postgres psql -U postgres -d aiqa_agent -c "SELECT * FROM messages;"
+    ```
 ## Testing
 
 - Tests are located in `test_main.py`.

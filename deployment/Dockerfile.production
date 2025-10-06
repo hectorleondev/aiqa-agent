@@ -57,6 +57,10 @@ COPY core/ ./core/
 COPY schemas/ ./schemas/
 COPY services/ ./services/
 COPY requirements.txt ./
+COPY db/ ./db/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+
 
 # Create necessary directories and set permissions
 RUN mkdir -p /app/logs \

@@ -1,17 +1,13 @@
 import time
 import signal
 import logging
-from fastapi import Depends
 from core.config import get_settings
 from repositories.sqs_repository import SQSRepository
 from services.sqs_processor_service import SQSProcessorService
-from sqlalchemy.orm import Session
-from db.session import get_db
+from db.session import get_db_context
 from repositories.message_repository import MessageRepository
 
 
-
-# Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -22,14 +18,9 @@ class SQSListener:
     def __init__(self):
         self.running = True
         self.settings = get_settings()
-        self.db_session: Session = Depends(get_db)
 
         # Initialize repositories
         self.sqs_repo = SQSRepository(self.settings)
-        self.message_repo = MessageRepository(self.db_session)
-
-        # Initialize services
-        self.processor = SQSProcessorService(self.sqs_repo, self.message_repo)
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGTERM, self._handle_shutdown)
@@ -70,12 +61,16 @@ class SQSListener:
                     if not self.running:
                         break
 
-                    success = self.processor.process_message(message)
+                    with get_db_context() as db:
+                        message_repo = MessageRepository(db)
 
-                    if not success:
-                        logger.warning(
-                            f"Failed to process message: {message.get('MessageId')}"
-                        )
+                        processor = SQSProcessorService(self.sqs_repo, message_repo)
+                        success = processor.process_message(message)
+
+                        if not success:
+                            logger.warning(
+                                f"Failed to process message: {message.get('MessageId')}"
+                            )
 
             except KeyboardInterrupt:
                 logger.info("Received keyboard interrupt, shutting down...")

@@ -3,7 +3,7 @@ from services.enhance_service import EnhanceService
 from schemas.enhance import EnhanceCreateRequest, EnhanceGetRequest, EnhanceResponse
 from api.dependencies import get_enhance_service
 
-router = APIRouter(prefix="/jira/stories/enhance", tags=["Jira Enhance"])
+router = APIRouter(prefix="/jira/stories/enhance", tags=["Enhance"])
 
 
 @router.post("/", response_model=EnhanceResponse)

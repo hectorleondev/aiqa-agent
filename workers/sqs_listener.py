@@ -1,11 +1,12 @@
 import time
 import signal
-import sys
 import logging
-from typing import Optional
+from db.session import get_db
 from core.config import get_settings
 from repositories.sqs_repository import SQSRepository
+from repositories.message_repository import MessageRepository
 from services.sqs_processor_service import SQSProcessorService
+
 
 # Configure logging
 logging.basicConfig(
@@ -18,12 +19,14 @@ class SQSListener:
     def __init__(self):
         self.running = True
         self.settings = get_settings()
+        self.db = get_db()
 
         # Initialize repositories
         self.sqs_repo = SQSRepository(self.settings)
+        self.message_repo = MessageRepository(self.db)
 
         # Initialize services
-        self.processor = SQSProcessorService(self.sqs_repo)
+        self.processor = SQSProcessorService(self.sqs_repo, self.message_repo)
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGTERM, self._handle_shutdown)

@@ -167,7 +167,7 @@ This repository contains a Python FastAPI web application for retrieving Jira is
 
 - Ensure Docker is installed for Dev Container support.
 - Configure Python type checking and inlay hints in VS Code for better development experience.
-- Production documentation http://ec2-44-214-255-186.compute-1.amazonaws.com/docs
+- Production documentation http://ec2-35-153-7-170.compute-1.amazonaws.com/docs
 ---
 
 Replace placeholder values in `.env` with your actual Jira credentials.

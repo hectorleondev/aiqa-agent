@@ -11,7 +11,6 @@ async def create_jira_enhance(
     request: EnhanceCreateRequest,
     enhance_service: EnhanceService = Depends(get_enhance_service),
 ):
-    """Create a comment on a Jira issue"""
     return enhance_service.create_jira_stories_enhance(request.issue_key, 30)
 
 
@@ -19,5 +18,4 @@ async def create_jira_enhance(
 def get_message(
     id: int, enhance_service: EnhanceService = Depends(get_enhance_service)
 ):
-    """Get message by ID"""
     return enhance_service.get_jira_stories_enhance(id)

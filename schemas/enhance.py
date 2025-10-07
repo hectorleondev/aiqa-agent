@@ -1,9 +1,18 @@
 from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
 
 
-class EnhanceCreate(BaseModel):
+class EnhanceCreateRequest(BaseModel):
     issue_key: str
 
 
-class EnhanceGet(BaseModel):
+class EnhanceGetRequest(BaseModel):
+    message_id: int
+
+
+class EnhanceResponse(EnhanceCreateRequest):
     id: int
+    status: str
+    start_date: datetime
+    end_date: Optional[datetime] = None

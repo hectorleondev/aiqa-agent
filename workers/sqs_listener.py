@@ -1,13 +1,13 @@
 import time
 import signal
-import sys
 import logging
-from typing import Optional
 from core.config import get_settings
 from repositories.sqs_repository import SQSRepository
 from services.sqs_processor_service import SQSProcessorService
+from db.session import get_db_context
+from repositories.message_repository import MessageRepository
 
-# Configure logging
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -21,9 +21,6 @@ class SQSListener:
 
         # Initialize repositories
         self.sqs_repo = SQSRepository(self.settings)
-
-        # Initialize services
-        self.processor = SQSProcessorService(self.sqs_repo)
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGTERM, self._handle_shutdown)
@@ -64,12 +61,16 @@ class SQSListener:
                     if not self.running:
                         break
 
-                    success = self.processor.process_message(message)
+                    with get_db_context() as db:
+                        message_repo = MessageRepository(db)
 
-                    if not success:
-                        logger.warning(
-                            f"Failed to process message: {message.get('MessageId')}"
-                        )
+                        processor = SQSProcessorService(self.sqs_repo, message_repo)
+                        success = processor.process_message(message)
+
+                        if not success:
+                            logger.warning(
+                                f"Failed to process message: {message.get('MessageId')}"
+                            )
 
             except KeyboardInterrupt:
                 logger.info("Received keyboard interrupt, shutting down...")

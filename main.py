@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 
-from api.routes import jira, health, messages
+from api.routes import jira, health, messages, enhance
 from core.exceptions import BadRequest, NotFound, InternalServerError
 
 app = FastAPI(title="IA QA AGENT")
@@ -23,7 +23,7 @@ async def not_found_handler(request, exc):
 async def internal_server_error_handler(request, exc):
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
-
+app.include_router(enhance.router)
 app.include_router(health.router)
 app.include_router(jira.router)
 app.include_router(messages.router)

@@ -16,6 +16,8 @@ COPY schemas/ ./schemas/
 COPY services/ ./services/
 COPY repositories/ ./repositories/
 COPY workers/ ./workers/
+COPY db/ ./db/
+
 
 # Create non-root user
 RUN useradd -m -u 1000 worker && chown -R worker:worker /app

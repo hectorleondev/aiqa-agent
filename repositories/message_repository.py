@@ -8,21 +8,21 @@ from core.exceptions import NotFound
 
 class MessageRepository:
     def __init__(self, db: Session):
-        self.db = db
+        self.db_session = db
 
     def create(self, issue_key: str, body: str, status: str = "pending") -> Message:
         """Create a new message"""
         message = Message(
             issue_key=issue_key, body=body, status=status, start_date=datetime.utcnow()
         )
-        self.db.add(message)
-        self.db.commit()
-        self.db.refresh(message)
+        self.db_session.add(message)
+        self.db_session.commit()
+        self.db_session.refresh(message)
         return message
 
     def get_by_id(self, message_id: int) -> Optional[Message]:
         """Get message by ID"""
-        message = self.db.query(Message).filter(Message.id == message_id).first()
+        message = self.db_session.query(Message).filter(Message.id == message_id).first()
         if message is None:
             raise NotFound("Message not found")
         return message
@@ -30,8 +30,8 @@ class MessageRepository:
 
     def get_by_issue_key(self, issue_key: str) -> List[Message]:
         """Get all messages for an issue"""
-        messages = self.db.query(Message).filter(Message.issue_key == issue_key).all()
-        if not messages:
+        messages = self.db_session.query(Message).filter(Message.issue_key == issue_key).all()
+        if messages is None:
             raise NotFound("messages not found")
         return messages
 
@@ -46,6 +46,6 @@ class MessageRepository:
             message.status = status
             if status in ["completed", "failed"]:
                 message.end_date = datetime.utcnow()
-            self.db.commit()
-            self.db.refresh(message)
+            self.db_session.commit()
+            self.db_session.refresh(message)
         return message

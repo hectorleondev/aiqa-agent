@@ -1,11 +1,14 @@
 import time
 import signal
 import logging
-from db.session import get_db
+from fastapi import Depends
 from core.config import get_settings
 from repositories.sqs_repository import SQSRepository
-from repositories.message_repository import MessageRepository
 from services.sqs_processor_service import SQSProcessorService
+from sqlalchemy.orm import Session
+from db.session import get_db
+from repositories.message_repository import MessageRepository
+
 
 
 # Configure logging
@@ -19,11 +22,11 @@ class SQSListener:
     def __init__(self):
         self.running = True
         self.settings = get_settings()
-        self.db = get_db()
+        self.db_session: Session = Depends(get_db)
 
         # Initialize repositories
         self.sqs_repo = SQSRepository(self.settings)
-        self.message_repo = MessageRepository(self.db)
+        self.message_repo = MessageRepository(self.db_session)
 
         # Initialize services
         self.processor = SQSProcessorService(self.sqs_repo, self.message_repo)

@@ -1,6 +1,4 @@
-import json
 import logging
-from typing import Dict
 from repositories.sqs_repository import SQSRepository
 from repositories.message_repository import MessageRepository
 
@@ -20,3 +18,7 @@ class EnhanceService:
             {"message_id": db_message.id, "wait_seconds": wait_seconds}
         )
         return db_message
+
+    def get_jira_stories_enhance(self, message_id: int):
+        message = self.message_repo.get_by_id(message_id)
+        return message

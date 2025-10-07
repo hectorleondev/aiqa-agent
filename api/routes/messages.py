@@ -22,10 +22,8 @@ def get_message(
     message_id: int, repo: MessageRepository = Depends(get_message_repository)
 ):
     """Get message by ID"""
-    message = repo.get_by_id(message_id)
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
-    return message
+    return repo.get_by_id(message_id)
+
 
 
 @router.get("/issue/{issue_key}", response_model=List[MessageResponse])

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from db.models import Message
 from datetime import datetime
 from typing import List, Optional
+from core.exceptions import NotFound
 
 
 class MessageRepository:
@@ -21,11 +22,15 @@ class MessageRepository:
 
     def get_by_id(self, message_id: int) -> Optional[Message]:
         """Get message by ID"""
-        return self.db.query(Message).filter(Message.id == message_id).first()
+        message = self.db.query(Message).filter(Message.id == message_id).first()
+        if not message:
+            raise NotFound("Message not found")
 
     def get_by_issue_key(self, issue_key: str) -> List[Message]:
         """Get all messages for an issue"""
-        return self.db.query(Message).filter(Message.issue_key == issue_key).all()
+        messages = self.db.query(Message).filter(Message.issue_key == issue_key).all()
+        if not messages:
+            raise NotFound("messages not found")
 
     def update_status(
         self, message_id: int, status: str, body: str
